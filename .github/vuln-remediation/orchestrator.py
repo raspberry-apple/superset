@@ -17,14 +17,12 @@
 """Orchestrator that creates and manages Devin sessions to remediate vulnerabilities."""
 from __future__ import annotations
 
-import json
 import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 
 import requests
-
 from config import PipelineConfig
 from scanner import Vulnerability
 
@@ -110,8 +108,11 @@ class Orchestrator:
                     timeout=10,
                 )
 
-    def create_github_issue(self, vuln: Vulnerability) -> tuple[int, str]:
-        """Create a GitHub issue for a vulnerability. Returns (issue_number, issue_url)."""
+    def create_github_issue(
+        self,
+        vuln: Vulnerability,
+    ) -> tuple[int, str]:
+        """Create a GitHub issue for a vulnerability."""
         owner, repo = self.config.github_repo.split("/")
         resp = requests.post(
             f"https://api.github.com/repos/{owner}/{repo}/issues",
@@ -132,62 +133,106 @@ class Orchestrator:
 
     # -- Devin Session Management --
 
-    def _build_remediation_prompt(self, task: RemediationTask) -> str:
+    def _build_remediation_prompt(  # noqa: E501
+        self,
+        task: RemediationTask,
+    ) -> str:
         """Build the prompt for a Devin remediation session."""
         vuln = task.vulnerability
+        fix_ver = (
+            vuln.recommended_fix_version or "latest"
+        )
+        issue_url = task.github_issue_url or "N/A"
+        issue_num = task.github_issue_number
 
         if vuln.ecosystem == "python":
-            return f"""You are remediating a security vulnerability in the Apache Superset repository.
+            return self._python_prompt(
+                vuln, fix_ver, issue_url, issue_num
+            )
+        return self._npm_prompt(
+            vuln, issue_url, issue_num
+        )
 
-## Vulnerability
-- **CVE:** {vuln.cve_id}
-- **Package:** {vuln.package}
-- **Current Version:** {vuln.current_version}
-- **Target Version:** {vuln.recommended_fix_version or 'latest secure version'}
-- **GitHub Issue:** {task.github_issue_url or 'N/A'}
+    def _python_prompt(  # noqa: C901
+        self,
+        vuln: Vulnerability,
+        fix_ver: str,
+        issue_url: str,
+        issue_num: int | None,
+    ) -> str:
+        lines = [
+            "You are remediating a security "
+            "vulnerability in Apache Superset.",
+            "",
+            "## Vulnerability",
+            f"- **CVE:** {vuln.cve_id}",
+            f"- **Package:** {vuln.package}",
+            f"- **Current Version:** {vuln.current_version}",
+            f"- **Target Version:** {fix_ver}",
+            f"- **GitHub Issue:** {issue_url}",
+            "",
+            "## Instructions",
+            "1. Check `requirements/base.in` and "
+            "`pyproject.toml` for the version "
+            f"constraint on `{vuln.package}`",
+            f"2. Update the version pin to `>={fix_ver}`"
+            " while respecting upper bounds",
+            "3. Regenerate `requirements/base.txt`:"
+            " `uv pip compile pyproject.toml "
+            "requirements/base.in "
+            "-o requirements/base.txt`",
+            "4. Run tests: "
+            "`pytest tests/unit_tests/ -x -q`",
+            "5. If tests fail due to API changes, "
+            "fix the affected call sites",
+            "6. Run `pre-commit run --all-files`",
+            "7. Create a PR with title: "
+            f"`fix(security): upgrade {vuln.package}"
+            f" to {fix_ver} [{vuln.cve_id}]`",
+            "",
+            "## Important",
+            "- Do NOT modify unrelated files",
+            "- If >10 files change, stop for review",
+            f"- Use `Fixes #{issue_num}` in PR body",
+        ]
+        return "\n".join(lines)
 
-## Instructions
-1. Check `requirements/base.in` and `pyproject.toml` for the version constraint on `{vuln.package}`
-2. Update the version pin to `>={vuln.recommended_fix_version or 'latest'}` while respecting upper bounds
-3. Regenerate `requirements/base.txt` by running: `uv pip compile pyproject.toml requirements/base.in -o requirements/base.txt`
-4. Run the relevant test suite to verify no breakage: `pytest tests/unit_tests/ -x -q --timeout=120`
-5. If tests fail due to API changes, fix the affected call sites
-6. Run `pre-commit run --all-files` to ensure code quality
-7. Create a PR with:
-   - Title: `fix(security): upgrade {vuln.package} to {vuln.recommended_fix_version} [{vuln.cve_id}]`
-   - Reference issue {task.github_issue_url or ''}
-   - Include a summary of what changed and any API migration notes
-
-## Important
-- Do NOT modify unrelated files
-- If the upgrade requires significant code changes (>10 files), document the scope and stop for review
-- Close the linked GitHub issue in the PR description with `Fixes #{task.github_issue_number}`
-"""
-        else:  # npm
-            return f"""You are remediating a security vulnerability in the Apache Superset frontend.
-
-## Vulnerability
-- **Advisory:** {vuln.cve_id}
-- **Package:** {vuln.package}
-- **Severity:** {vuln.severity.value.upper()}
-- **GitHub Issue:** {task.github_issue_url or 'N/A'}
-
-## Instructions
-1. Navigate to `superset-frontend/`
-2. Check if `{vuln.package}` is a direct or transitive dependency
-3. If direct: update version in `package.json`, run `npm install`
-4. If transitive: add an override in `package.json` under `overrides` field, or upgrade the parent package
-5. Run `npm audit` to verify the vulnerability is resolved
-6. Run `npm run test` to verify no breakage
-7. Run `npm run lint` for code quality
-8. Create a PR with:
-   - Title: `fix(security): remediate {vuln.package} vulnerability [{vuln.cve_id}]`
-   - Reference issue {task.github_issue_url or ''}
-
-## Important
-- Do NOT modify unrelated files
-- Close the linked GitHub issue with `Fixes #{task.github_issue_number}`
-"""
+    def _npm_prompt(
+        self,
+        vuln: Vulnerability,
+        issue_url: str,
+        issue_num: int | None,
+    ) -> str:
+        lines = [
+            "You are remediating a security "
+            "vulnerability in Superset frontend.",
+            "",
+            "## Vulnerability",
+            f"- **Advisory:** {vuln.cve_id}",
+            f"- **Package:** {vuln.package}",
+            f"- **Severity:** {vuln.severity.value.upper()}",
+            f"- **GitHub Issue:** {issue_url}",
+            "",
+            "## Instructions",
+            "1. Navigate to `superset-frontend/`",
+            f"2. Check if `{vuln.package}` is direct "
+            "or transitive",
+            "3. If direct: update `package.json`, "
+            "run `npm install`",
+            "4. If transitive: add override or "
+            "upgrade parent package",
+            "5. Run `npm audit` to verify fix",
+            "6. Run `npm run test`",
+            "7. Run `npm run lint`",
+            "8. Create a PR with title: "
+            f"`fix(security): remediate {vuln.package}"
+            f" [{vuln.cve_id}]`",
+            "",
+            "## Important",
+            "- Do NOT modify unrelated files",
+            f"- Use `Fixes #{issue_num}` in PR body",
+        ]
+        return "\n".join(lines)
 
     def create_devin_session(self, task: RemediationTask) -> str:
         """Create a Devin session to remediate a vulnerability. Returns session_id."""
@@ -206,7 +251,10 @@ class Orchestrator:
         resp.raise_for_status()
         data = resp.json()
         session_id: str = data["session_id"]
-        session_url: str = data.get("url", f"https://app.devin.ai/sessions/{session_id}")
+        session_url: str = data.get(  # noqa: F841
+            "url",
+            f"https://app.devin.ai/sessions/{session_id}",
+        )
         logger.info(
             "Created Devin session %s for %s %s",
             session_id,
@@ -227,9 +275,16 @@ class Orchestrator:
 
     # -- Orchestration --
 
-    def create_tasks(self, vulnerabilities: list[Vulnerability]) -> list[RemediationTask]:
-        """Create remediation tasks for a list of vulnerabilities."""
-        self.tasks = [RemediationTask(vulnerability=v) for v in vulnerabilities if v.has_fix]
+    def create_tasks(
+        self,
+        vulnerabilities: list[Vulnerability],
+    ) -> list[RemediationTask]:
+        """Create remediation tasks for vulnerabilities."""
+        self.tasks = [
+            RemediationTask(vulnerability=v)
+            for v in vulnerabilities
+            if v.has_fix
+        ]
         skipped = [v for v in vulnerabilities if not v.has_fix]
         if skipped:
             logger.warning(
@@ -239,24 +294,15 @@ class Orchestrator:
             )
         return self.tasks
 
-    def run_pipeline(self) -> list[RemediationTask]:
-        """Execute the full pipeline: create issues → start Devin sessions → monitor."""
-        if not self.tasks:
-            logger.info("No tasks to process")
-            return self.tasks
-
-        # Step 1: Ensure labels exist
-        try:
-            self._ensure_labels_exist()
-        except Exception:
-            logger.warning("Could not create labels (may lack permissions)")
-
-        # Step 2: Create GitHub issues
+    def _create_issues(self) -> None:
+        """Create GitHub issues for all tasks."""
         for task in self.tasks:
             try:
-                issue_number, issue_url = self.create_github_issue(task.vulnerability)
-                task.github_issue_number = issue_number
-                task.github_issue_url = issue_url
+                num, url = self.create_github_issue(
+                    task.vulnerability
+                )
+                task.github_issue_number = num
+                task.github_issue_url = url
             except Exception as e:
                 logger.error(
                     "Failed to create issue for %s: %s",
@@ -264,42 +310,77 @@ class Orchestrator:
                     e,
                 )
                 task.status = SessionStatus.FAILED
-                task.error_message = f"Issue creation failed: {e}"
+                task.error_message = (
+                    f"Issue creation failed: {e}"
+                )
 
-        # Step 3: Start Devin sessions (respecting concurrency limit)
-        active_sessions: list[RemediationTask] = []
-        pending_tasks = [t for t in self.tasks if t.status == SessionStatus.PENDING]
+    def _start_session(
+        self,
+        task: RemediationTask,
+        active: list[RemediationTask],
+    ) -> None:
+        """Start a single Devin session for a task."""
+        try:
+            session_id = self.create_devin_session(task)
+            task.devin_session_id = session_id
+            task.devin_session_url = (
+                f"https://app.devin.ai/sessions/{session_id}"
+            )
+            task.status = SessionStatus.RUNNING
+            task.started_at = time.time()
+            active.append(task)
+        except Exception as e:
+            logger.error(
+                "Failed to create Devin session for %s: %s",
+                task.vulnerability.package,
+                e,
+            )
+            task.status = SessionStatus.FAILED
+            task.error_message = (
+                f"Session creation failed: {e}"
+            )
 
-        for task in pending_tasks:
-            # Wait if at concurrency limit
-            while len(active_sessions) >= self.config.max_concurrent_sessions:
-                active_sessions = self._poll_active_sessions(active_sessions)
-                if len(active_sessions) >= self.config.max_concurrent_sessions:
+    def run_pipeline(self) -> list[RemediationTask]:
+        """Execute the full remediation pipeline."""
+        if not self.tasks:
+            logger.info("No tasks to process")
+            return self.tasks
+
+        try:
+            self._ensure_labels_exist()
+        except Exception:
+            logger.warning(
+                "Could not create labels (may lack permissions)"
+            )
+
+        self._create_issues()
+
+        active: list[RemediationTask] = []
+        pending = [
+            t for t in self.tasks
+            if t.status == SessionStatus.PENDING
+        ]
+
+        for task in pending:
+            while (
+                len(active)
+                >= self.config.max_concurrent_sessions
+            ):
+                active = self._poll_active_sessions(active)
+                if (
+                    len(active)
+                    >= self.config.max_concurrent_sessions
+                ):
                     time.sleep(30)
+            self._start_session(task, active)
 
-            try:
-                session_id = self.create_devin_session(task)
-                task.devin_session_id = session_id
-                task.devin_session_url = (
-                    f"https://app.devin.ai/sessions/{session_id}"
+        while active:
+            active = self._poll_active_sessions(active)
+            if active:
+                logger.info(
+                    "%d sessions still active",
+                    len(active),
                 )
-                task.status = SessionStatus.RUNNING
-                task.started_at = time.time()
-                active_sessions.append(task)
-            except Exception as e:
-                logger.error(
-                    "Failed to create Devin session for %s: %s",
-                    task.vulnerability.package,
-                    e,
-                )
-                task.status = SessionStatus.FAILED
-                task.error_message = f"Session creation failed: {e}"
-
-        # Step 4: Wait for all active sessions to complete
-        while active_sessions:
-            active_sessions = self._poll_active_sessions(active_sessions)
-            if active_sessions:
-                logger.info("%d sessions still active", len(active_sessions))
                 time.sleep(30)
 
         return self.tasks
@@ -354,19 +435,26 @@ class Orchestrator:
     def get_results_summary(self) -> dict[str, object]:
         """Return a structured summary of all task results."""
         total = len(self.tasks)
-        succeeded = sum(1 for t in self.tasks if t.status == SessionStatus.SUCCEEDED)
-        failed = sum(1 for t in self.tasks if t.status == SessionStatus.FAILED)
-        timed_out = sum(1 for t in self.tasks if t.status == SessionStatus.TIMED_OUT)
-        running = sum(1 for t in self.tasks if t.status == SessionStatus.RUNNING)
-        pending = sum(1 for t in self.tasks if t.status == SessionStatus.PENDING)
+        def _count(s: SessionStatus) -> int:
+            return sum(
+                1 for t in self.tasks if t.status == s
+            )
 
+        succeeded = _count(SessionStatus.SUCCEEDED)
+        rate = (
+            f"{succeeded / total * 100:.1f}%"
+            if total > 0
+            else "N/A"
+        )
         return {
             "total_tasks": total,
             "succeeded": succeeded,
-            "failed": failed,
-            "timed_out": timed_out,
-            "running": running,
-            "pending": pending,
-            "success_rate": f"{succeeded / total * 100:.1f}%" if total > 0 else "N/A",
-            "tasks": [t.to_dict() for t in self.tasks],
+            "failed": _count(SessionStatus.FAILED),
+            "timed_out": _count(SessionStatus.TIMED_OUT),
+            "running": _count(SessionStatus.RUNNING),
+            "pending": _count(SessionStatus.PENDING),
+            "success_rate": rate,
+            "tasks": [
+                t.to_dict() for t in self.tasks
+            ],
         }

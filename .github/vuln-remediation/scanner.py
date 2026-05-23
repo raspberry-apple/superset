@@ -17,7 +17,7 @@
 """Vulnerability scanner for Python (pip-audit) and npm (npm audit) dependencies."""
 from __future__ import annotations
 
-import json
+import json  # noqa: TID251
 import logging
 import subprocess
 from dataclasses import dataclass, field
@@ -44,11 +44,15 @@ class Severity(Enum):
         }
         return mapping.get(normalized, cls.MODERATE)
 
-    def __ge__(self, other: Severity) -> bool:  # type: ignore[override]
+    def __ge__(self, other: object) -> bool:
+        if not isinstance(other, Severity):
+            return NotImplemented
         order = [Severity.LOW, Severity.MODERATE, Severity.HIGH, Severity.CRITICAL]
         return order.index(self) >= order.index(other)
 
-    def __gt__(self, other: Severity) -> bool:  # type: ignore[override]
+    def __gt__(self, other: object) -> bool:
+        if not isinstance(other, Severity):
+            return NotImplemented
         order = [Severity.LOW, Severity.MODERATE, Severity.HIGH, Severity.CRITICAL]
         return order.index(self) > order.index(other)
 
@@ -87,7 +91,11 @@ class Vulnerability:
     @property
     def issue_body(self) -> str:
         aliases_str = ", ".join(self.aliases) if self.aliases else "None"
-        fix_str = ", ".join(self.fix_versions) if self.fix_versions else "No fix available"
+        fix_str = (
+            ", ".join(self.fix_versions)
+            if self.fix_versions
+            else "No fix available"
+        )
         return f"""## Vulnerability Details
 - **Package:** `{self.package}`
 - **Ecosystem:** {self.ecosystem}
@@ -101,11 +109,24 @@ class Vulnerability:
 {self.description[:1000]}
 
 ## Remediation
-{"Upgrade `" + self.package + "` to `>=" + self.recommended_fix_version + "` and verify no breaking changes in the test suite." if self.has_fix else "No automated fix available. Manual review required."}
+{self._remediation_text()}
 
 ## Automation
 This issue is tracked by the Devin vulnerability remediation pipeline.
 """
+
+    def _remediation_text(self) -> str:
+        if self.has_fix:
+            fix_ver = self.recommended_fix_version
+            return (
+                f"Upgrade `{self.package}` to "
+                f"`>={fix_ver}` and verify no "
+                "breaking changes in the test suite."
+            )
+        return (
+            "No automated fix available. "
+            "Manual review required."
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -125,8 +146,15 @@ def scan_python_dependencies(requirements_path: str) -> list[Vulnerability]:
     """Run pip-audit against a requirements file and return vulnerabilities."""
     logger.info("Scanning Python dependencies: %s", requirements_path)
     try:
-        result = subprocess.run(
-            ["pip-audit", "-r", requirements_path, "--format", "json"],
+        cmd = [
+            "pip-audit",
+            "-r",
+            requirements_path,
+            "--format",
+            "json",
+        ]
+        result = subprocess.run(  # noqa: S603, S607
+            cmd,
             capture_output=True,
             text=True,
             timeout=300,
@@ -172,12 +200,14 @@ def scan_python_dependencies(requirements_path: str) -> list[Vulnerability]:
     return vulnerabilities
 
 
-def scan_npm_dependencies(frontend_dir: str) -> list[Vulnerability]:
-    """Run npm audit against the frontend package and return vulnerabilities."""
-    logger.info("Scanning npm dependencies in: %s", frontend_dir)
+def _run_npm_audit(
+    frontend_dir: str,
+) -> dict[str, object] | None:
+    """Execute npm audit and return parsed JSON."""
     try:
-        result = subprocess.run(
-            ["npm", "audit", "--json"],
+        cmd = ["npm", "audit", "--json"]
+        result = subprocess.run(  # noqa: S603, S607
+            cmd,
             capture_output=True,
             text=True,
             cwd=frontend_dir,
@@ -185,61 +215,90 @@ def scan_npm_dependencies(frontend_dir: str) -> list[Vulnerability]:
         )
     except FileNotFoundError:
         logger.error("npm not found")
-        return []
+        return None
     except subprocess.TimeoutExpired:
         logger.error("npm audit timed out after 120s")
-        return []
+        return None
 
     output = result.stdout
     if not output:
         logger.warning("npm audit produced no output")
-        return []
+        return None
 
     try:
-        data = json.loads(output)
-    except json.JSONDecodeError:
-        logger.error("Failed to parse npm audit JSON output")
+        return json.loads(output)  # noqa: TID251
+    except json.JSONDecodeError:  # noqa: TID251
+        logger.error("Failed to parse npm audit JSON")
+        return None
+
+
+def _parse_npm_vuln(
+    name: str,
+    info: dict[str, object],
+) -> Vulnerability:
+    """Parse a single npm audit vulnerability entry."""
+    severity = Severity.from_string(
+        str(info.get("severity", "moderate"))
+    )
+    via_entries: list[object] = info.get("via", [])  # type: ignore[assignment]
+    description_parts: list[str] = []
+    cve_ids: list[str] = []
+    fix_version = info.get("fixAvailable", {})
+
+    for via in via_entries:
+        if isinstance(via, dict):
+            description_parts.append(via.get("title", ""))
+            url = via.get("url", "")
+            if "CVE-" in url or "GHSA-" in url:
+                cve_ids.append(url.split("/")[-1])
+            elif via.get("cwe"):
+                cve_ids.append(str(via["cwe"]))
+
+    cve_id = cve_ids[0] if cve_ids else f"NPM-{name}"
+    desc = (
+        "; ".join(filter(None, description_parts))
+        or f"Vulnerability in {name}"
+    )
+
+    fix_ver = ""
+    if isinstance(fix_version, dict):
+        fix_ver = fix_version.get("version", "")
+    elif isinstance(fix_version, bool) and fix_version:
+        fix_ver = "latest"
+
+    return Vulnerability(
+        package=name,
+        current_version=str(info.get("range", "unknown")),
+        cve_id=cve_id,
+        severity=severity,
+        fix_versions=[fix_ver] if fix_ver else [],
+        description=desc,
+        ecosystem="npm",
+    )
+
+
+def scan_npm_dependencies(
+    frontend_dir: str,
+) -> list[Vulnerability]:
+    """Run npm audit and return vulnerabilities."""
+    logger.info(
+        "Scanning npm dependencies in: %s", frontend_dir
+    )
+    data = _run_npm_audit(frontend_dir)
+    if data is None:
         return []
 
-    vulnerabilities: list[Vulnerability] = []
-    for name, info in data.get("vulnerabilities", {}).items():
-        severity = Severity.from_string(info.get("severity", "moderate"))
-        via_entries = info.get("via", [])
-        description_parts: list[str] = []
-        cve_ids: list[str] = []
-        fix_version = info.get("fixAvailable", {})
+    vulns_dict: dict[str, object] = data.get(  # type: ignore[assignment]
+        "vulnerabilities", {}
+    )
+    vulnerabilities = [
+        _parse_npm_vuln(name, info)  # type: ignore[arg-type]
+        for name, info in vulns_dict.items()
+    ]
 
-        for via in via_entries:
-            if isinstance(via, dict):
-                description_parts.append(via.get("title", ""))
-                url = via.get("url", "")
-                if "CVE-" in url or "GHSA-" in url:
-                    cve_ids.append(url.split("/")[-1])
-                elif via.get("cwe"):
-                    cve_ids.append(str(via["cwe"]))
-
-        cve_id = cve_ids[0] if cve_ids else f"NPM-{name}"
-        description = "; ".join(filter(None, description_parts)) or f"Vulnerability in {name}"
-
-        fix_ver = ""
-        if isinstance(fix_version, dict):
-            fix_ver = fix_version.get("version", "")
-        elif isinstance(fix_version, bool) and fix_version:
-            fix_ver = "latest"
-
-        vulnerabilities.append(
-            Vulnerability(
-                package=name,
-                current_version=info.get("range", "unknown"),
-                cve_id=cve_id,
-                severity=severity,
-                fix_versions=[fix_ver] if fix_ver else [],
-                description=description,
-                ecosystem="npm",
-            )
-        )
-
-    logger.info("Found %d npm vulnerabilities", len(vulnerabilities))
+    logger.info(
+        "Found %d npm vulnerabilities", len(vulnerabilities)
+    )
     return vulnerabilities
 
 
@@ -279,4 +338,4 @@ def run_full_scan(
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     vulns = run_full_scan()
-    print(json.dumps([v.to_dict() for v in vulns], indent=2))
+    print(json.dumps([v.to_dict() for v in vulns], indent=2))  # noqa: TID251

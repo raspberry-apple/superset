@@ -29,7 +29,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
+import json  # noqa: TID251
 import logging
 import sys
 from datetime import datetime, timezone
@@ -38,7 +38,7 @@ from pathlib import Path
 from config import PipelineConfig
 from dashboard import generate_markdown_report, save_reports
 from orchestrator import Orchestrator, RemediationTask, SessionStatus
-from scanner import Vulnerability, run_full_scan
+from scanner import run_full_scan, Severity, Vulnerability
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,6 +46,35 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("pipeline")
+
+
+def _task_from_dict(
+    t: dict[str, object],
+) -> RemediationTask:
+    """Deserialize a task dict into a RemediationTask."""
+    v = t["vulnerability"]
+    assert isinstance(v, dict)
+    return RemediationTask(
+        vulnerability=Vulnerability(
+            package=str(v["package"]),
+            current_version=str(v["current_version"]),
+            cve_id=str(v["cve_id"]),
+            severity=Severity.from_string(
+                str(v["severity"])
+            ),
+            fix_versions=list(v.get("fix_versions", [])),
+            description=str(v.get("description", "")),
+            ecosystem=str(v.get("ecosystem", "python")),
+        ),
+        github_issue_number=t.get("github_issue_number"),  # type: ignore[arg-type]
+        github_issue_url=t.get("github_issue_url"),  # type: ignore[arg-type]
+        devin_session_id=t.get("devin_session_id"),  # type: ignore[arg-type]
+        devin_session_url=t.get("devin_session_url"),  # type: ignore[arg-type]
+        pull_request_url=t.get("pull_request_url"),  # type: ignore[arg-type]
+        status=SessionStatus(
+            t.get("status", "pending")
+        ),
+    )
 
 
 def run_scan(config: PipelineConfig) -> list[Vulnerability]:
@@ -85,7 +114,12 @@ def run_remediation(
 
     orchestrator = Orchestrator(config=config)
     tasks = orchestrator.create_tasks(vulns)
-    logger.info("Created %d remediation tasks (%d skipped: no fix)", len(tasks), len(vulns) - len(tasks))
+    skipped = len(vulns) - len(tasks)
+    logger.info(
+        "Created %d remediation tasks (%d skipped: no fix)",
+        len(tasks),
+        skipped,
+    )
 
     if not tasks:
         return tasks
@@ -140,7 +174,10 @@ def main() -> None:
         "--mode",
         choices=["full", "scan", "report"],
         default="full",
-        help="Pipeline mode: 'full' (scan+fix+report), 'scan' (scan only), 'report' (from saved JSON)",
+        help=(
+            "Pipeline mode: 'full' (scan+fix+report), "
+            "'scan' (scan only), 'report' (from saved JSON)"
+        ),
     )
     parser.add_argument(
         "--input",
@@ -179,36 +216,27 @@ def main() -> None:
         if not args.input:
             logger.error("--input required for report mode")
             sys.exit(1)
-        data = json.loads(Path(args.input).read_text())
+        raw = Path(args.input).read_text()
+        data = json.loads(raw)  # noqa: TID251
+        task_list = (
+            data.get("tasks", data)
+            if isinstance(data, dict)
+            else data
+        )
         tasks = [
-            RemediationTask(
-                vulnerability=Vulnerability(
-                    package=t["vulnerability"]["package"],
-                    current_version=t["vulnerability"]["current_version"],
-                    cve_id=t["vulnerability"]["cve_id"],
-                    severity=__import__("scanner").Severity.from_string(
-                        t["vulnerability"]["severity"]
-                    ),
-                    fix_versions=t["vulnerability"]["fix_versions"],
-                    description=t["vulnerability"].get("description", ""),
-                    ecosystem=t["vulnerability"].get("ecosystem", "python"),
-                ),
-                github_issue_number=t.get("github_issue_number"),
-                github_issue_url=t.get("github_issue_url"),
-                devin_session_id=t.get("devin_session_id"),
-                devin_session_url=t.get("devin_session_url"),
-                pull_request_url=t.get("pull_request_url"),
-                status=SessionStatus(t.get("status", "pending")),
-            )
-            for t in (data.get("tasks", data) if isinstance(data, dict) else data)
+            _task_from_dict(t) for t in task_list
         ]
         run_report(tasks, config, args.output_dir)
 
     elif args.mode == "full":
         # Validate required env vars
         if not config.devin_api_token and not args.dry_run:
-            logger.error("DEVIN_API_TOKEN environment variable required for full mode")
-            logger.error("Set it or use --dry-run to skip Devin sessions")
+            logger.error(
+                "DEVIN_API_TOKEN env var required for full mode"
+            )
+            logger.error(
+                "Set it or use --dry-run to skip Devin sessions"
+            )
             sys.exit(1)
 
         vulns = run_scan(config)
