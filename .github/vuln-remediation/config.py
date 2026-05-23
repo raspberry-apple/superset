@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """Configuration for the vulnerability remediation pipeline."""
+
 from __future__ import annotations
 
 import os

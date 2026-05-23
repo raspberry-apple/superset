@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """Orchestrator that creates and manages Devin sessions to remediate vulnerabilities."""
+
 from __future__ import annotations
 
 import logging
@@ -139,19 +140,13 @@ class Orchestrator:
     ) -> str:
         """Build the prompt for a Devin remediation session."""
         vuln = task.vulnerability
-        fix_ver = (
-            vuln.recommended_fix_version or "latest"
-        )
+        fix_ver = vuln.recommended_fix_version or "latest"
         issue_url = task.github_issue_url or "N/A"
         issue_num = task.github_issue_number
 
         if vuln.ecosystem == "python":
-            return self._python_prompt(
-                vuln, fix_ver, issue_url, issue_num
-            )
-        return self._npm_prompt(
-            vuln, issue_url, issue_num
-        )
+            return self._python_prompt(vuln, fix_ver, issue_url, issue_num)
+        return self._npm_prompt(vuln, issue_url, issue_num)
 
     def _python_prompt(  # noqa: C901
         self,
@@ -161,8 +156,7 @@ class Orchestrator:
         issue_num: int | None,
     ) -> str:
         lines = [
-            "You are remediating a security "
-            "vulnerability in Apache Superset.",
+            "You are remediating a security vulnerability in Apache Superset.",
             "",
             "## Vulnerability",
             f"- **CVE:** {vuln.cve_id}",
@@ -175,16 +169,13 @@ class Orchestrator:
             "1. Check `requirements/base.in` and "
             "`pyproject.toml` for the version "
             f"constraint on `{vuln.package}`",
-            f"2. Update the version pin to `>={fix_ver}`"
-            " while respecting upper bounds",
+            f"2. Update the version pin to `>={fix_ver}` while respecting upper bounds",
             "3. Regenerate `requirements/base.txt`:"
             " `uv pip compile pyproject.toml "
             "requirements/base.in "
             "-o requirements/base.txt`",
-            "4. Run tests: "
-            "`pytest tests/unit_tests/ -x -q`",
-            "5. If tests fail due to API changes, "
-            "fix the affected call sites",
+            "4. Run tests: `pytest tests/unit_tests/ -x -q`",
+            "5. If tests fail due to API changes, fix the affected call sites",
             "6. Run `pre-commit run --all-files`",
             "7. Create a PR with title: "
             f"`fix(security): upgrade {vuln.package}"
@@ -204,8 +195,7 @@ class Orchestrator:
         issue_num: int | None,
     ) -> str:
         lines = [
-            "You are remediating a security "
-            "vulnerability in Superset frontend.",
+            "You are remediating a security vulnerability in Superset frontend.",
             "",
             "## Vulnerability",
             f"- **Advisory:** {vuln.cve_id}",
@@ -215,12 +205,9 @@ class Orchestrator:
             "",
             "## Instructions",
             "1. Navigate to `superset-frontend/`",
-            f"2. Check if `{vuln.package}` is direct "
-            "or transitive",
-            "3. If direct: update `package.json`, "
-            "run `npm install`",
-            "4. If transitive: add override or "
-            "upgrade parent package",
+            f"2. Check if `{vuln.package}` is direct or transitive",
+            "3. If direct: update `package.json`, run `npm install`",
+            "4. If transitive: add override or upgrade parent package",
             "5. Run `npm audit` to verify fix",
             "6. Run `npm run test`",
             "7. Run `npm run lint`",
@@ -281,9 +268,7 @@ class Orchestrator:
     ) -> list[RemediationTask]:
         """Create remediation tasks for vulnerabilities."""
         self.tasks = [
-            RemediationTask(vulnerability=v)
-            for v in vulnerabilities
-            if v.has_fix
+            RemediationTask(vulnerability=v) for v in vulnerabilities if v.has_fix
         ]
         skipped = [v for v in vulnerabilities if not v.has_fix]
         if skipped:
@@ -298,9 +283,7 @@ class Orchestrator:
         """Create GitHub issues for all tasks."""
         for task in self.tasks:
             try:
-                num, url = self.create_github_issue(
-                    task.vulnerability
-                )
+                num, url = self.create_github_issue(task.vulnerability)
                 task.github_issue_number = num
                 task.github_issue_url = url
             except Exception as e:
@@ -310,9 +293,7 @@ class Orchestrator:
                     e,
                 )
                 task.status = SessionStatus.FAILED
-                task.error_message = (
-                    f"Issue creation failed: {e}"
-                )
+                task.error_message = f"Issue creation failed: {e}"
 
     def _start_session(
         self,
@@ -323,9 +304,7 @@ class Orchestrator:
         try:
             session_id = self.create_devin_session(task)
             task.devin_session_id = session_id
-            task.devin_session_url = (
-                f"https://app.devin.ai/sessions/{session_id}"
-            )
+            task.devin_session_url = f"https://app.devin.ai/sessions/{session_id}"
             task.status = SessionStatus.RUNNING
             task.started_at = time.time()
             active.append(task)
@@ -336,9 +315,7 @@ class Orchestrator:
                 e,
             )
             task.status = SessionStatus.FAILED
-            task.error_message = (
-                f"Session creation failed: {e}"
-            )
+            task.error_message = f"Session creation failed: {e}"
 
     def run_pipeline(self) -> list[RemediationTask]:
         """Execute the full remediation pipeline."""
@@ -349,28 +326,17 @@ class Orchestrator:
         try:
             self._ensure_labels_exist()
         except Exception:
-            logger.warning(
-                "Could not create labels (may lack permissions)"
-            )
+            logger.warning("Could not create labels (may lack permissions)")
 
         self._create_issues()
 
         active: list[RemediationTask] = []
-        pending = [
-            t for t in self.tasks
-            if t.status == SessionStatus.PENDING
-        ]
+        pending = [t for t in self.tasks if t.status == SessionStatus.PENDING]
 
         for task in pending:
-            while (
-                len(active)
-                >= self.config.max_concurrent_sessions
-            ):
+            while len(active) >= self.config.max_concurrent_sessions:
                 active = self._poll_active_sessions(active)
-                if (
-                    len(active)
-                    >= self.config.max_concurrent_sessions
-                ):
+                if len(active) >= self.config.max_concurrent_sessions:
                     time.sleep(30)
             self._start_session(task, active)
 
@@ -425,9 +391,7 @@ class Orchestrator:
                 else:
                     still_active.append(task)
             except Exception as e:
-                logger.error(
-                    "Error polling session %s: %s", task.devin_session_id, e
-                )
+                logger.error("Error polling session %s: %s", task.devin_session_id, e)
                 still_active.append(task)
 
         return still_active
@@ -435,17 +399,12 @@ class Orchestrator:
     def get_results_summary(self) -> dict[str, object]:
         """Return a structured summary of all task results."""
         total = len(self.tasks)
+
         def _count(s: SessionStatus) -> int:
-            return sum(
-                1 for t in self.tasks if t.status == s
-            )
+            return sum(1 for t in self.tasks if t.status == s)
 
         succeeded = _count(SessionStatus.SUCCEEDED)
-        rate = (
-            f"{succeeded / total * 100:.1f}%"
-            if total > 0
-            else "N/A"
-        )
+        rate = f"{succeeded / total * 100:.1f}%" if total > 0 else "N/A"
         return {
             "total_tasks": total,
             "succeeded": succeeded,
@@ -454,7 +413,5 @@ class Orchestrator:
             "running": _count(SessionStatus.RUNNING),
             "pending": _count(SessionStatus.PENDING),
             "success_rate": rate,
-            "tasks": [
-                t.to_dict() for t in self.tasks
-            ],
+            "tasks": [t.to_dict() for t in self.tasks],
         }

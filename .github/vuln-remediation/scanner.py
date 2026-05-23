@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """Vulnerability scanner for Python (pip-audit) and npm (npm audit) dependencies."""
+
 from __future__ import annotations
 
 import json  # noqa: TID251
@@ -92,9 +93,7 @@ class Vulnerability:
     def issue_body(self) -> str:
         aliases_str = ", ".join(self.aliases) if self.aliases else "None"
         fix_str = (
-            ", ".join(self.fix_versions)
-            if self.fix_versions
-            else "No fix available"
+            ", ".join(self.fix_versions) if self.fix_versions else "No fix available"
         )
         return f"""## Vulnerability Details
 - **Package:** `{self.package}`
@@ -123,10 +122,7 @@ This issue is tracked by the Devin vulnerability remediation pipeline.
                 f"`>={fix_ver}` and verify no "
                 "breaking changes in the test suite."
             )
-        return (
-            "No automated fix available. "
-            "Manual review required."
-        )
+        return "No automated fix available. Manual review required."
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -186,9 +182,7 @@ def scan_python_dependencies(requirements_path: str) -> list[Vulnerability]:
                     package=dep["name"],
                     current_version=dep["version"],
                     cve_id=vuln["id"],
-                    severity=Severity.from_string(
-                        vuln.get("severity", "moderate")
-                    ),
+                    severity=Severity.from_string(vuln.get("severity", "moderate")),
                     fix_versions=vuln.get("fix_versions", []),
                     description=vuln.get("description", ""),
                     ecosystem="python",
@@ -237,9 +231,7 @@ def _parse_npm_vuln(
     info: dict[str, object],
 ) -> Vulnerability:
     """Parse a single npm audit vulnerability entry."""
-    severity = Severity.from_string(
-        str(info.get("severity", "moderate"))
-    )
+    severity = Severity.from_string(str(info.get("severity", "moderate")))
     via_entries: list[object] = info.get("via", [])  # type: ignore[assignment]
     description_parts: list[str] = []
     cve_ids: list[str] = []
@@ -255,10 +247,7 @@ def _parse_npm_vuln(
                 cve_ids.append(str(via["cwe"]))
 
     cve_id = cve_ids[0] if cve_ids else f"NPM-{name}"
-    desc = (
-        "; ".join(filter(None, description_parts))
-        or f"Vulnerability in {name}"
-    )
+    desc = "; ".join(filter(None, description_parts)) or f"Vulnerability in {name}"
 
     fix_ver = ""
     if isinstance(fix_version, dict):
@@ -281,9 +270,7 @@ def scan_npm_dependencies(
     frontend_dir: str,
 ) -> list[Vulnerability]:
     """Run npm audit and return vulnerabilities."""
-    logger.info(
-        "Scanning npm dependencies in: %s", frontend_dir
-    )
+    logger.info("Scanning npm dependencies in: %s", frontend_dir)
     data = _run_npm_audit(frontend_dir)
     if data is None:
         return []
@@ -296,9 +283,7 @@ def scan_npm_dependencies(
         for name, info in vulns_dict.items()
     ]
 
-    logger.info(
-        "Found %d npm vulnerabilities", len(vulnerabilities)
-    )
+    logger.info("Found %d npm vulnerabilities", len(vulnerabilities))
     return vulnerabilities
 
 

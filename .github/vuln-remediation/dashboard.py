@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """Observability dashboard: generates reports for engineering leaders."""
+
 from __future__ import annotations
 
 import json  # noqa: TID251
@@ -46,11 +47,7 @@ def generate_markdown_report(
 
     # Compute average duration for completed tasks
     completed = succeeded + failed + timed_out
-    durations = [
-        t.duration_seconds
-        for t in completed
-        if t.duration_seconds
-    ]
+    durations = [t.duration_seconds for t in completed if t.duration_seconds]
     avg_duration = sum(durations) / len(durations) if durations else 0
 
     success_rate = f"{len(succeeded) / total * 100:.0f}%" if total > 0 else "N/A"
@@ -88,18 +85,18 @@ def generate_markdown_report(
         sev = task.vulnerability.severity.value.upper()
         severity_counts[sev] = severity_counts.get(sev, 0) + 1
 
-    lines.extend([
-        "## Severity Breakdown",
-        "",
-        "| Severity | Count | Remediated |",
-        "|----------|-------|------------|",
-    ])
+    lines.extend(
+        [
+            "## Severity Breakdown",
+            "",
+            "| Severity | Count | Remediated |",
+            "|----------|-------|------------|",
+        ]
+    )
     for sev in ["CRITICAL", "HIGH", "MODERATE", "LOW"]:
         count = severity_counts.get(sev, 0)
         remediated = sum(
-            1
-            for t in succeeded
-            if t.vulnerability.severity.value.upper() == sev
+            1 for t in succeeded if t.vulnerability.severity.value.upper() == sev
         )
         if count > 0:
             lines.append(f"| {sev} | {count} | {remediated} |")
@@ -108,33 +105,31 @@ def generate_markdown_report(
     # Ecosystem breakdown
     python_tasks = [t for t in tasks if t.vulnerability.ecosystem == "python"]
     npm_tasks = [t for t in tasks if t.vulnerability.ecosystem == "npm"]
-    py_ok = sum(
-        1 for t in python_tasks
-        if t.status == SessionStatus.SUCCEEDED
+    py_ok = sum(1 for t in python_tasks if t.status == SessionStatus.SUCCEEDED)
+    npm_ok = sum(1 for t in npm_tasks if t.status == SessionStatus.SUCCEEDED)
+    lines.extend(
+        [
+            "## Ecosystem Breakdown",
+            "",
+            "| Ecosystem | Vulnerabilities | Remediated |",
+            "|-----------|----------------|------------|",
+            f"| Python (pip) | {len(python_tasks)} | {py_ok} |",
+            f"| JavaScript (npm) | {len(npm_tasks)} | {npm_ok} |",
+            "",
+            "---",
+            "",
+        ]
     )
-    npm_ok = sum(
-        1 for t in npm_tasks
-        if t.status == SessionStatus.SUCCEEDED
-    )
-    lines.extend([
-        "## Ecosystem Breakdown",
-        "",
-        "| Ecosystem | Vulnerabilities | Remediated |",
-        "|-----------|----------------|------------|",
-        f"| Python (pip) | {len(python_tasks)} | {py_ok} |",
-        f"| JavaScript (npm) | {len(npm_tasks)} | {npm_ok} |",
-        "",
-        "---",
-        "",
-    ])
 
     # Detailed task table
-    lines.extend([
-        "## Task Details",
-        "",
-        "| # | Package | CVE | Severity | Status | Issue | PR | Devin Session |",
-        "|---|---------|-----|----------|--------|-------|----|---------------|",
-    ])
+    lines.extend(
+        [
+            "## Task Details",
+            "",
+            "| # | Package | CVE | Severity | Status | Issue | PR | Devin Session |",
+            "|---|---------|-----|----------|--------|-------|----|---------------|",
+        ]
+    )
     for i, task in enumerate(tasks, 1):
         v = task.vulnerability
         status_emoji = {
@@ -150,13 +145,9 @@ def generate_markdown_report(
             if task.github_issue_number
             else "—"
         )
-        pr_link = (
-            f"[PR]({task.pull_request_url})" if task.pull_request_url else "—"
-        )
+        pr_link = f"[PR]({task.pull_request_url})" if task.pull_request_url else "—"
         session_link = (
-            f"[View]({task.devin_session_url})"
-            if task.devin_session_url
-            else "—"
+            f"[View]({task.devin_session_url})" if task.devin_session_url else "—"
         )
 
         sev_str = v.severity.value.upper()
@@ -175,39 +166,38 @@ def generate_markdown_report(
     if failed or timed_out:
         lines.extend(["## Failures & Timeouts", ""])
         for task in failed + timed_out:
-            lines.extend([
-                f"### {task.vulnerability.package} ({task.vulnerability.cve_id})",
-                f"- **Status:** {task.status.value}",
-                f"- **Error:** {task.error_message or 'Unknown'}",
-                f"- **Session:** {task.devin_session_url or 'N/A'}",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {task.vulnerability.package} ({task.vulnerability.cve_id})",
+                    f"- **Status:** {task.status.value}",
+                    f"- **Error:** {task.error_message or 'Unknown'}",
+                    f"- **Session:** {task.devin_session_url or 'N/A'}",
+                    "",
+                ]
+            )
         lines.extend(["---", ""])
 
     # Footer
-    pipeline_url = (
-        f"https://github.com/{repo}"
-        "/tree/master/.github/vuln-remediation"
+    pipeline_url = f"https://github.com/{repo}/tree/master/.github/vuln-remediation"
+    lines.extend(
+        [
+            "## How to Read This Report",
+            "",
+            "_This report is auto-generated by the "
+            "Devin vulnerability remediation pipeline._",
+            "",
+            "- **Success Rate** = remediated / total "
+            "vulnerabilities with available fixes",
+            "- **Avg. Remediation Time** = mean duration of completed Devin sessions",
+            "- Failures typically indicate breaking API "
+            "changes requiring manual review",
+            "- Each Devin session link provides full logs and diffs",
+            "",
+            "---",
+            f"_Generated at {timestamp} by "
+            f"[vuln-remediation-pipeline]({pipeline_url})_",
+        ]
     )
-    lines.extend([
-        "## How to Read This Report",
-        "",
-        "_This report is auto-generated by the "
-        "Devin vulnerability remediation pipeline._",
-        "",
-        "- **Success Rate** = remediated / total "
-        "vulnerabilities with available fixes",
-        "- **Avg. Remediation Time** = mean duration "
-        "of completed Devin sessions",
-        "- Failures typically indicate breaking API "
-        "changes requiring manual review",
-        "- Each Devin session link provides "
-        "full logs and diffs",
-        "",
-        "---",
-        f"_Generated at {timestamp} by "
-        f"[vuln-remediation-pipeline]({pipeline_url})_",
-    ])
 
     return "\n".join(lines)
 

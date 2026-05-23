@@ -26,6 +26,7 @@ Usage:
     # Report only: generate report from previous run
     python pipeline.py --mode report --input results.json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -59,9 +60,7 @@ def _task_from_dict(
             package=str(v["package"]),
             current_version=str(v["current_version"]),
             cve_id=str(v["cve_id"]),
-            severity=Severity.from_string(
-                str(v["severity"])
-            ),
+            severity=Severity.from_string(str(v["severity"])),
             fix_versions=list(v.get("fix_versions", [])),
             description=str(v.get("description", "")),
             ecosystem=str(v.get("ecosystem", "python")),
@@ -71,9 +70,7 @@ def _task_from_dict(
         devin_session_id=t.get("devin_session_id"),  # type: ignore[arg-type]
         devin_session_url=t.get("devin_session_url"),  # type: ignore[arg-type]
         pull_request_url=t.get("pull_request_url"),  # type: ignore[arg-type]
-        status=SessionStatus(
-            t.get("status", "pending")
-        ),
+        status=SessionStatus(t.get("status", "pending")),
     )
 
 
@@ -218,25 +215,15 @@ def main() -> None:
             sys.exit(1)
         raw = Path(args.input).read_text()
         data = json.loads(raw)  # noqa: TID251
-        task_list = (
-            data.get("tasks", data)
-            if isinstance(data, dict)
-            else data
-        )
-        tasks = [
-            _task_from_dict(t) for t in task_list
-        ]
+        task_list = data.get("tasks", data) if isinstance(data, dict) else data
+        tasks = [_task_from_dict(t) for t in task_list]
         run_report(tasks, config, args.output_dir)
 
     elif args.mode == "full":
         # Validate required env vars
         if not config.devin_api_token and not args.dry_run:
-            logger.error(
-                "DEVIN_API_TOKEN env var required for full mode"
-            )
-            logger.error(
-                "Set it or use --dry-run to skip Devin sessions"
-            )
+            logger.error("DEVIN_API_TOKEN env var required for full mode")
+            logger.error("Set it or use --dry-run to skip Devin sessions")
             sys.exit(1)
 
         vulns = run_scan(config)
