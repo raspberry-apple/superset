@@ -1,0 +1,150 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+name: "Vulnerability Remediation Pipeline"
+
+on:
+  # Scheduled: run weekly on Monday at 9am UTC
+  schedule:
+    - cron: "0 9 * * 1"
+
+  # Manual trigger with options
+  workflow_dispatch:
+    inputs:
+      severity:
+        description: "Minimum severity threshold"
+        required: false
+        default: "moderate"
+        type: choice
+        options:
+          - low
+          - moderate
+          - high
+          - critical
+      dry_run:
+        description: "Dry run (scan only, no Devin sessions)"
+        required: false
+        default: false
+        type: boolean
+      ecosystem:
+        description: "Which ecosystem to scan"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - python
+          - npm
+
+  # Event-driven: trigger on new security advisories via issue labels
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  # Gate: check if this is a relevant trigger
+  should-run:
+    runs-on: ubuntu-24.04
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Check trigger
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            # Only run if the label is 'vulnerability' or 'security'
+            LABEL="${{ github.event.label.name }}"
+            if [ "$LABEL" = "vulnerability" ] || [ "$LABEL" = "security" ]; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  scan-and-remediate:
+    needs: should-run
+    if: needs.should-run.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "./superset-frontend/.nvmrc"
+
+      - name: Install scanning tools
+        run: |
+          pip install pip-audit requests
+          cd superset-frontend && npm ci --ignore-scripts
+
+      - name: Run vulnerability scan
+        id: scan
+        run: |
+          cd .github/vuln-remediation
+          python pipeline.py \
+            --mode scan \
+            --severity ${{ inputs.severity || 'moderate' }} \
+            --output-dir ${{ github.workspace }}/reports
+
+      - name: Run remediation pipeline
+        if: ${{ inputs.dry_run != 'true' }}
+        env:
+          DEVIN_API_TOKEN: ${{ secrets.DEVIN_API_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          cd .github/vuln-remediation
+          python pipeline.py \
+            --mode full \
+            --severity ${{ inputs.severity || 'moderate' }} \
+            --output-dir ${{ github.workspace }}/reports
+
+      - name: Generate report (dry run)
+        if: ${{ inputs.dry_run == 'true' }}
+        run: |
+          cd .github/vuln-remediation
+          python pipeline.py \
+            --mode full \
+            --severity ${{ inputs.severity || 'moderate' }} \
+            --output-dir ${{ github.workspace }}/reports \
+            --dry-run
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-reports
+          path: reports/
+          retention-days: 90
+
+      - name: Post summary to GitHub
+        if: always()
+        run: |
+          if [ -f reports/report_*.md ]; then
+            REPORT=$(ls -t reports/report_*.md | head -1)
+            cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          fi

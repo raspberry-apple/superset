@@ -1,0 +1,365 @@
+[
+  {
+    "package": "flask",
+    "current_version": "2.3.3",
+    "cve_id": "CVE-2026-27205",
+    "severity": "moderate",
+    "fix_versions": [
+      "3.1.3"
+    ],
+    "description": "When the `session` object is accessed, Flask should set the `Vary: Cookie` header. This instructs caches not to cache the response, as it may contain information specific to a logged in user. This is handled in most cases, but some forms of access such as the Python `in` operator were overlooked.  The severity depends on the application's use of the session, and the cache's behavior regarding cookies. The risk depends on all these conditions being met.  1. The application must be hosted behind a",
+    "ecosystem": "python",
+    "aliases": [
+      "GHSA-68rp-wp8r-4726"
+    ],
+    "has_fix": true
+  },
+  {
+    "package": "idna",
+    "current_version": "3.10",
+    "cve_id": "CVE-2026-45409",
+    "severity": "moderate",
+    "fix_versions": [
+      "3.15"
+    ],
+    "description": "This is the same issue as CVE-2024-3651, however the original remediation in 2024 was not a complete fix. Payloads such as `\"\\u0660\" * N` or `\"\\u30fb\" * N + \"\\u6f22\"` utilize the `valid_contexto` function prior to length rejection, and for high values of `N` will take a long time to process.  ### Impact A specially crafted argument to the `idna.encode()` function could consume significant resources. This may lead to a denial-of-service.  ### Patches Starting in version 3.14, the function rejects",
+    "ecosystem": "python",
+    "aliases": [
+      "GHSA-65pc-fj4g-8rjx"
+    ],
+    "has_fix": true
+  },
+  {
+    "package": "mako",
+    "current_version": "1.3.11",
+    "cve_id": "CVE-2026-44307",
+    "severity": "moderate",
+    "fix_versions": [
+      "1.3.12"
+    ],
+    "description": "## Summary  On Windows, a URI using backslash traversal (e.g. `\\..\\..\\ secret.txt`) bypasses the directory traversal check in `Template.__init__` and the `posixpath`-based normalization in `TemplateLookup.get_template()`, allowing reads of files outside the configured template directory.   ## Details  The root cause is a mismatch between `posixpath` (used for URI normalization in `get_template()`) and `os.path` (used for file access via `os.path.isfile()` and validation via `os.path.normpath()` ",
+    "ecosystem": "python",
+    "aliases": [
+      "GHSA-2h4p-vjrc-8xpq"
+    ],
+    "has_fix": true
+  },
+  {
+    "package": "paramiko",
+    "current_version": "3.5.1",
+    "cve_id": "CVE-2026-44405",
+    "severity": "moderate",
+    "fix_versions": [],
+    "description": "In Paramiko through 4.0.0 before a448945, rsakey.py allows the SHA-1 algorithm.",
+    "ecosystem": "python",
+    "aliases": [
+      "GHSA-r374-rxx8-8654"
+    ],
+    "has_fix": false
+  },
+  {
+    "package": "pyarrow",
+    "current_version": "20.0.0",
+    "cve_id": "PYSEC-2026-113",
+    "severity": "moderate",
+    "fix_versions": [
+      "23.0.1"
+    ],
+    "description": "Use After Free vulnerability in Apache Arrow C++.  This issue affects Apache Arrow C++ from 15.0.0 through 23.0.0. It can be triggered when reading an Arrow IPC file (but not an IPC stream) with pre-buffering enabled, if the IPC file contains data with variadic buffers (such as Binary View and String View data). Depending on the number of variadic buffers in a record batch column and on the temporal sequence of multi-threaded IO, a write to a dangling pointer could occur. The value (a `std::shar",
+    "ecosystem": "python",
+    "aliases": [
+      "CVE-2026-25087"
+    ],
+    "has_fix": true
+  },
+  {
+    "package": "urllib3",
+    "current_version": "2.6.3",
+    "cve_id": "PYSEC-2026-142",
+    "severity": "moderate",
+    "fix_versions": [
+      "2.7.0"
+    ],
+    "description": "urllib3 is an HTTP client library for Python. From 2.6.0 to before 2.7.0, urllib3 could decompress the whole response instead of the requested portion (1) during the second HTTPResponse.read(amt=N) call when the response was decompressed using the official Brotli library or (2) when HTTPResponse.drain_conn() was called after the response had been read and decompressed partially (compression algorithm did not matter here). These issues could cause urllib3 to fully decode a small amount of highly ",
+    "ecosystem": "python",
+    "aliases": [
+      "CVE-2026-44432",
+      "GHSA-mf9v-mfxr-j63j"
+    ],
+    "has_fix": true
+  },
+  {
+    "package": "urllib3",
+    "current_version": "2.6.3",
+    "cve_id": "PYSEC-2026-141",
+    "severity": "moderate",
+    "fix_versions": [
+      "2.7.0"
+    ],
+    "description": "urllib3 is an HTTP client library for Python. From 1.23 to before 2.7.0, cross-origin redirects followed from the low-level API via ProxyManager.connection_from_url().urlopen(..., assert_same_host=False) still forward these sensitive headers. This vulnerability is fixed in 2.7.0.",
+    "ecosystem": "python",
+    "aliases": [
+      "CVE-2026-44431",
+      "GHSA-qccp-gfcp-xxvc"
+    ],
+    "has_fix": true
+  },
+  {
+    "package": "@istanbuljs/nyc-config-typescript",
+    "current_version": ">=1.0.1",
+    "cve_id": "NPM-@istanbuljs/nyc-config-typescript",
+    "severity": "moderate",
+    "fix_versions": [
+      "1.0.0"
+    ],
+    "description": "Vulnerability in @istanbuljs/nyc-config-typescript",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "@pmmmwh/react-refresh-webpack-plugin",
+    "current_version": ">=0.3.1",
+    "cve_id": "NPM-@pmmmwh/react-refresh-webpack-plugin",
+    "severity": "moderate",
+    "fix_versions": [
+      "0.3.0"
+    ],
+    "description": "Vulnerability in @pmmmwh/react-refresh-webpack-plugin",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "@storybook/addon-actions",
+    "current_version": "<=0.0.0-pr-34011-sha-c45b0f3f || 3.1.6 - 6.2.0-rc.13 || 7.0.7 - 9.0.0-rc.5",
+    "cve_id": "NPM-@storybook/addon-actions",
+    "severity": "moderate",
+    "fix_versions": [
+      "9.0.8"
+    ],
+    "description": "Vulnerability in @storybook/addon-actions",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "@storybook/addon-essentials",
+    "current_version": "<=5.3.0-rc.14 || 6.0.0-alpha.0 - 6.2.0-rc.13 || 7.0.7 - 9.0.0-alpha.3",
+    "cve_id": "NPM-@storybook/addon-essentials",
+    "severity": "moderate",
+    "fix_versions": [
+      "7.0.6"
+    ],
+    "description": "Vulnerability in @storybook/addon-essentials",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "@storybook/test-runner",
+    "current_version": "*",
+    "cve_id": "NPM-@storybook/test-runner",
+    "severity": "moderate",
+    "fix_versions": [
+      "0.6.3"
+    ],
+    "description": "Vulnerability in @storybook/test-runner",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "body-parser",
+    "current_version": "1.20.3 - 1.20.4 || 2.0.0-beta.1 - 2.0.2",
+    "cve_id": "NPM-body-parser",
+    "severity": "moderate",
+    "fix_versions": [
+      "latest"
+    ],
+    "description": "Vulnerability in body-parser",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "brace-expansion",
+    "current_version": "5.0.2 - 5.0.5",
+    "cve_id": "GHSA-jxxr-4gwj-5jf2",
+    "severity": "moderate",
+    "fix_versions": [
+      "latest"
+    ],
+    "description": "brace-expansion: Large numeric range defeats documented `max` DoS protection",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "eslint-plugin-i18n-strings",
+    "current_version": "*",
+    "cve_id": "GHSA-55h3-fm53-wq99",
+    "severity": "critical",
+    "fix_versions": [],
+    "description": "Malware in eslint-plugin-i18n-strings",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": false
+  },
+  {
+    "package": "express",
+    "current_version": "4.21.0 - 4.22.1 || 5.0.0-alpha.1 - 5.0.1",
+    "cve_id": "NPM-express",
+    "severity": "moderate",
+    "fix_versions": [
+      "latest"
+    ],
+    "description": "Vulnerability in express",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "ip-address",
+    "current_version": "<=10.1.0",
+    "cve_id": "GHSA-v2v4-37r5-5v8g",
+    "severity": "moderate",
+    "fix_versions": [
+      "latest"
+    ],
+    "description": "ip-address has XSS in Address6 HTML-emitting methods",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "istanbul-lib-processinfo",
+    "current_version": "*",
+    "cve_id": "NPM-istanbul-lib-processinfo",
+    "severity": "moderate",
+    "fix_versions": [
+      "1.0.0"
+    ],
+    "description": "Vulnerability in istanbul-lib-processinfo",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "jest-junit",
+    "current_version": "9.0.0 - 16.0.0",
+    "cve_id": "NPM-jest-junit",
+    "severity": "moderate",
+    "fix_versions": [
+      "0.6.3"
+    ],
+    "description": "Vulnerability in jest-junit",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "jest-playwright-preset",
+    "current_version": ">=1.0.0-rc1",
+    "cve_id": "NPM-jest-playwright-preset",
+    "severity": "moderate",
+    "fix_versions": [
+      "0.6.3"
+    ],
+    "description": "Vulnerability in jest-playwright-preset",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "nyc",
+    "current_version": ">=15.0.0-alpha.0",
+    "cve_id": "NPM-nyc",
+    "severity": "moderate",
+    "fix_versions": [
+      "1.0.0"
+    ],
+    "description": "Vulnerability in nyc",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "postcss",
+    "current_version": "<8.5.10",
+    "cve_id": "GHSA-qx2v-qp2m-jg93",
+    "severity": "moderate",
+    "fix_versions": [
+      "latest"
+    ],
+    "description": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "qs",
+    "current_version": "6.11.1 - 6.15.1",
+    "cve_id": "GHSA-q8mj-m7cp-5q26",
+    "severity": "moderate",
+    "fix_versions": [
+      "latest"
+    ],
+    "description": "qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in comma-format arrays when encodeValuesOnly is set",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "sockjs",
+    "current_version": ">=0.3.17",
+    "cve_id": "NPM-sockjs",
+    "severity": "moderate",
+    "fix_versions": [
+      "1.16.5"
+    ],
+    "description": "Vulnerability in sockjs",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "uuid",
+    "current_version": "<11.1.1",
+    "cve_id": "GHSA-w5hq-g745-h8pq",
+    "severity": "moderate",
+    "fix_versions": [
+      "9.0.8"
+    ],
+    "description": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "webpack-dev-server",
+    "current_version": ">=2.0.0-beta",
+    "cve_id": "NPM-webpack-dev-server",
+    "severity": "moderate",
+    "fix_versions": [
+      "1.16.5"
+    ],
+    "description": "Vulnerability in webpack-dev-server",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  },
+  {
+    "package": "ws",
+    "current_version": "8.0.0 - 8.20.0",
+    "cve_id": "GHSA-58qx-3vcg-4xpx",
+    "severity": "moderate",
+    "fix_versions": [
+      "latest"
+    ],
+    "description": "ws: Uninitialized memory disclosure",
+    "ecosystem": "npm",
+    "aliases": [],
+    "has_fix": true
+  }
+]
