@@ -36,6 +36,7 @@
   "overrides": {
     "cypress": {
       "form-data": "^2.3.4"
-    }
+    },
+    "d3-interpolate": "^3.0.1"
   }
 }
