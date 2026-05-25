@@ -421,7 +421,8 @@
     "@jest/types": "^30.4.0",
     "jest-util": "^30.4.0",
     "jest-circus": "^30.4.0",
-    "jest-environment-node": "^30.4.0"
+    "jest-environment-node": "^30.4.0",
+    "d3-color": "^3.1.0"
   },
   "readme": "ERROR: No README data found!",
   "scarfSettings": {
